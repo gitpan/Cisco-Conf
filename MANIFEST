@@ -1,0 +1,8 @@
+ChangeLog
+MANIFEST
+Makefile.PL
+README
+cisconf.PL
+lib/Cisco/Conf.pm
+lib/Cisco/Conf/Install.pm
+t/base.t
