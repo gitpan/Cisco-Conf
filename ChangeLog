@@ -1,3 +1,7 @@
+2000-03-29  Jochen Wiedmann  <joe@ispsoft.de> (0.10)
+
+	* Runs with Cisco IOS 12.0 now.
+
 1998-11-30  Jochen Wiedmann  <joe@ispsoft.de> (0.08)
 
 	* cisconf.PL (Add): The Add command is now creating an empty file

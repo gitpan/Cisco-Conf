@@ -29,7 +29,7 @@ require IO::File;
 require Safe;
 require Data::Dumper;
 
-$Cisco::Conf::VERSION = '0.09';
+$Cisco::Conf::VERSION = '0.10';
 
 
 =pod
@@ -725,15 +725,21 @@ sub Load ($$) {
     if (!$cmd->print($self->{'_local_addr'})) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/file to write \[.*\]\? /');
+    my($prematch, $match) =
+	$cmd->waitfor('/(destination filename|file to write)\s+\[.*\]\? /i');
     if (!$cmd->print($tftp_client_file)) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/\[confirm\]/');
-    if (!$cmd->print('y')) {
-	die "Output error: $!";
+    if ($match =~ /^destination/i) {
+	# Cisco IOS 12.0
+	$cmd->waitfor('/\d+\s+bytes\s+copied\s+in/');
+    } else {
+	$cmd->waitfor('/\[confirm\]/');
+	if (!$cmd->print('y')) {
+	    die "Output error: $!";
+	}
+	$cmd->waitfor('/\[OK\].*\#/s');
     }
-    $cmd->waitfor('/\[OK\].*\#/s');
     $self->_Logout($cmd);
 }
 
@@ -782,21 +788,33 @@ sub Save ($$;$) {
     if (!$cmd->print("copy tftp running-config")) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/\[host\]\? /');
-    if (!$cmd->print("")) {
-	die "Output error: $!";
+    my($prematch, $match) = 
+	$cmd->waitfor('/\[(host|\d+\.\d+\.\d+\.\d+)?\]\? /');
+    if ($match eq "[host]") {
+	# Cisco IOS below 12.0
+	if (!$cmd->print("")) {
+	    die "Output error: $!";
+	}
+	$cmd->waitfor('/\[(\d+\.\d+\.\d+\.\d+)?\]\? /');
     }
-    $cmd->waitfor('/\[(\d+\.\d+\.\d+\.\d+)?\]\? /');
     if (!$cmd->print($self->{'_local_addr'})) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/Name of configuration file \[.*\]\? /');
+    $cmd->waitfor('/(?:Source filename|Name of configuration file) \[.*\]\? /');
     if (!$cmd->print($tftp_client_file)) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/confirm/');
-    if (!$cmd->print('y')) {
- 	die "Output error: $!";
+    ($prematch, $match) =
+	$cmd->waitfor('/(Destination filename \[.*\]|confirm)/');
+    if ($match =~ /^Destination filename \[.*\]$/) {
+	# Cisco IOS 12.0
+	if (!$cmd->print("")) {
+	    die "Output error: $!";
+	}
+    } else {
+	if (!$cmd->print('y')) {
+	    die "Output error: $!";
+	}
     }
     $cmd->waitfor('/\[OK.*bytes\].*\#/s');
     if ($write) {
