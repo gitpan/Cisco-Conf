@@ -29,7 +29,7 @@ require IO::File;
 require Safe;
 require Data::Dumper;
 
-$Cisco::Conf::VERSION = '0.08';
+$Cisco::Conf::VERSION = '0.09';
 
 
 =pod

@@ -123,8 +123,8 @@ sub Info () {
 		$dLength = length($ref->{'description'});
 	    }
 	}
-	my $format = sprintf("    %%-%ds  %%%ds", $nLength, $dLength);
-	printf("You have access to the following routers:\n\n$format\n\n",
+	my $format = sprintf("    %%-%ds  %%%ds\n", $nLength, $dLength);
+	printf("You have access to the following routers:\n\n$format\n",
 	       'Name', 'Description');
 	foreach $ref (sort { $a->{'name'} cmp $b->{'name'} } @$list) {
 	    printf($format, $ref->{'name'}, $ref->{'description'});
