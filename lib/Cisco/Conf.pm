@@ -29,8 +29,7 @@ require IO::File;
 require Safe;
 require Data::Dumper;
 
-
-$Cisco::Conf::VERSION = '0.06';
+$Cisco::Conf::VERSION = '0.08';
 
 
 =pod
@@ -52,6 +51,7 @@ Cisco::Conf - Perl module for configuring Cisco routers via TFTP
 		    'description' => 'My Internet gateway',
 		    'users' => ['root', 'joe'],
 		    'host' => '192.168.1.1',
+		    'username' => 'itsme',
 		    'password' => 'secret',
 		    'enable_password' => undef  # Prompt password
 		   });
@@ -67,7 +67,7 @@ Cisco::Conf - Perl module for configuring Cisco routers via TFTP
   $conf->Edit($editor, $file, $tmpDir);
 
   # Feed a machine's configuration into RCS
-  $conf->RCS($file);
+  $conf->RCS($file, "in");
 
   # Load a machine's configuration and save it in 'myfile'
   $conf->Load('myfile');
@@ -132,12 +132,15 @@ A textual description of the configuration.
 
 The routers host name or IP address
 
+=item username
+
 =item password
 
 =item enable_password
 
-The routers login and enable passwords. If this attribute is not present
-or has an undef value, the methods will prompt for passwords.
+The routers username, login and enable passwords. If these attributes
+are not present or have a value of undef, the methods will prompt for
+passwords.
 
 =item file
 
@@ -201,6 +204,7 @@ sub _SaveConfigFile ($$$) {
 	  . "    description - Router description\n"
 	  . "    users - List of users that may configure this router\n"
 	  . "    host - Routers host name\n"
+	  . "    username - Routers login password (may be undef)\n"
 	  . "    password - Routers login password (may be undef)\n"
 	  . "    enable_password - Routers enable password (may be undef)\n"
 	 ],
@@ -507,26 +511,44 @@ sub Edit ($$$$) {
 }
 
 
-=head2 RCS($file)
+=head2 RCS($file, $inout)
 
 (Instance method) Invoke the revision control system (RCS) by using
 the I<ci> attribute from the config file
 
 Example:
 
-    $self->RCS($file);
+    $self->RCS($file, "in");
 
 =cut
 
 
-sub RCS ($$) {
-    my($self, $file) = @_;
+sub RCS ($$$) {
+    my($self, $file, $inout) = @_;
+    my $haveRcs = eval { require Rcs };
 
-    my $ci = $self->{'ci'};
-    if (!$ci) {
-	die "No RCS program configured in " . $self->{'configFile'};
+    if (!$haveRcs) {
+	if ($inout eq 'in') {
+	    my $ci = $self->{'ci'};
+	    if (!$ci) {
+		die "No RCS program configured in " . $self->{'configFile'};
+	    }
+	    $self->_System(sprintf("%s %s", $ci, $file));
+	}
+    } else {
+	require File::Basename;
+	my $dir = File::Basename::dirname($file);
+	my $file = File::Basename::basename($file);
+	my $rcs = Rcs->new();
+	$rcs->rcsdir("$dir/RCS");
+	$rcs->workdir($dir);
+	$rcs->file($file);
+	if ($inout eq "in") {
+	    $rcs->ci("-u");
+	} else {
+	    $rcs->co("-l");
+	}
     }
-    $self->_System(sprintf("%s %s", $ci, $file));
 }
 
 
@@ -583,7 +605,11 @@ as soon as possible.
 
 sub _PromptPassword ($$) {
     my($self, $type) = @_;
-    print("\nPlease enter the $type password:");
+    if ($type eq "Username") {
+	print("\nEnter the username:");
+    } else {
+	print("\nPlease enter the $type password:");
+    }
     $@ = '';
     eval { require Term::ReadKey; };
     my $password;
@@ -630,6 +656,8 @@ sub _Login ($) {
 	my $match;
 	(undef, $match) = $cmd->waitfor(Match => '/\>/',
 					Match => '/\#/',
+					Match => '/ogin:/',
+                                        Match => '/sername:/',
 					Match => '/assword:/');
 	if ($match =~ /\#/) {
 	    if (!$cmd->print("term mon")) {
@@ -642,6 +670,9 @@ sub _Login ($) {
 	if ($match =~ /\>/) {
 	    $loggedIn = 1;
 	    $output = "enable";
+	} elsif ($match =~ /sername:/ || $match =~ /ogin:/) {
+	    $output = $self->{'username'} ||
+		$self->_PromptPassword("Username");
 	} elsif (!$loggedIn) {
 	    $output = $self->{'password'}  ||
 		$self->_PromptPassword("Login");
@@ -807,11 +838,55 @@ sub Info ($$) {
 }
 
 
+=head2 EtcFile($config)
+
+(Instance method) Returns a routers config file name.
+
+=cut
+
+sub EtcFile {
+    my $self = shift; my $config = shift;
+    $self->{'etc_file'} or ($config->{'etc_dir'} . "/" . $self->{'file'});
+}
+
+
+=head2 TftpFile($config)
+
+(Instance method) Returns a routers TFTP file name.
+
+=cut
+
+sub TftpFile {
+    my $self = shift; my $config = shift;
+    $self->{'tftp_file'} or ($config->{'tftp_dir'} . "/" . $self->{'file'});
+}
+
+
 1;
 
 __END__
 
 =pod
+
+
+=head1 CREDITS
+
+=over 8
+
+=item Esfandiar Tabari <Esfandiar_Tabari@hugoboss.com>
+
+for giving me the contract that included the cisconf script. :-)
+
+=item Tungning Cheng <cherng@bbn.com>
+
+for fixing the nasty open file bug ...
+
+=item Mike Newton <mike@delusion.org>
+
+for adding the username and supporting the Rcs module.
+
+=back
+
 
 =head1 AUTHOR AND COPYRIGHT
 

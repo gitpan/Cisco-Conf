@@ -1,3 +1,17 @@
+1998-11-30  Jochen Wiedmann  <joe@ispsoft.de> (0.08)
+
+	* cisconf.PL (Add): The Add command is now creating an empty file
+	  or loading the current configuration as initial version.
+	  Suggested by Philipp Buehler <philipp@buehler.de>.
+	* Added lib/Bundle/Cisco/Conf.pm.
+	* Fixed "make install" problems on Solaris.
+
+1998-09-22  Jochen Wiedmann  <joe@ispsoft.de> (0.07)
+
+	* cisconf.PL (Add): Added username. Mike Newton <mike@delusion.org>
+	* lib/Cisco/Conf.pm (Info): Added support for the Rcs module.
+	  Mike Newton <mike@delusion.org>
+
 1998-07-17  Jochen Wiedmann  <joe@ispsoft.de> (0.05)
 
 	* cisconf.PL: Fixed bug in cisconf/Save; the tftp_file was

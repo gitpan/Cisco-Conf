@@ -145,6 +145,23 @@ sub Info () {
 #
 ############################################################################
 
+sub _Load {
+    my($config, $conf, $name) = @_;
+    my $tftpFile = $conf->TftpFile($config);
+    if (-f $tftpFile  &&  ! -z _) {
+        print "\nWarning: A file $tftpFile already exists!";
+	print "\nOverwrite it? [y]";
+	my $reply = <STDIN>;
+	$reply =~ s/\s+//;
+	if ($reply ne ''  &&  $reply !~ /y/i) {
+	    exit 0;
+	}
+    }
+    $conf->Load($tftpFile);
+    $tftpFile;
+}
+
+
 sub Add ($) {
     my $name = shift;
     my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
@@ -152,6 +169,9 @@ sub Add ($) {
     if (!$name) {
 	print STDERR "Must have a valid router name.\n";
 	exit 1;
+    }
+    if (exists($config->{'hosts'}->{$name})) {
+	die "A router $name already exists.";
     }
 
     print "\nEnter a description of the router $name (one line):\n";
@@ -193,9 +213,24 @@ sub Add ($) {
     $reply =~ s/\s+$//;
     $local_address = $reply ? $reply : $local_address;
 
-    print "\nEnter the routers login password. If you don't enter a";
-    print "\npassword, but an empty string, you will be queried for";
-    print "\nthe password each time you are accessing the router: [undef] ";
+    print "\nDepending on your routers configuration, a username might";
+    print "\nbe required. If so, you may make it part of the cisconf";
+    print "\nconfiguration by entering it now. If you don't, or if your";
+    print "\nrouter doesn't require a username, enter the word 'undef'.";
+    print "\nIn the latter case you will be queried whenever a username";
+    print "\nis required. Username: [undef] ";
+    $reply = <STDIN>;
+    $reply =~ s/^\s+//;
+    $reply =~ s/\s+$//;
+    my $login_username = $reply;
+    if ($login_username eq 'undef') {
+	$login_username = undef;
+    }
+
+    print "\nEnter the routers login password or the word 'undef', if you";
+    print "\ndon't want to configure a fixed password. If you don't enter a";
+    print "\npassword, you will be queried for the password each time you";
+    print "\nare accessing the router: [undef] ";
     $reply = <STDIN>;
     $reply =~ s/^\s+//;
     $reply =~ s/\s+$//;
@@ -220,9 +255,44 @@ sub Add ($) {
                                      'users' => [split(/ /, $user)],
                                      'host' => $peer_address,
                                      'local_addr' => $local_address,
+				     'username' => $login_username,
                                      'password' => $login_password,
                                      'enable_password' => $enable_password,
                                      'file' => $file });
+    $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
+    my $conf = Cisco::Conf->Read($config, $name);
+
+    my $etcFile = $conf->EtcFile($config);
+    if (-f $etcFile) {
+        print "\nA file $etcFile already exists. Keeping the existing file.\n";
+	return;
+    }
+
+    print "\nShall I try to load the routers current configuration as an";
+    print "\ninitial version? An empty file will be created otherwise: [y] ";
+    $reply = <STDIN>;
+    $reply =~ s/^\s+//;
+    $reply =~ s/\s+$//;
+
+    my $configuration;
+    if (!$reply  ||  $reply =~ /y/i) {
+        my $file = _Load($config, $conf, $name);
+	local $/ = undef;
+	my $fh = Symbol::gensym();
+	if (!open($fh, "<$file")  ||  !defined($configuration = <$fh>)  ||
+	    !close($fh)) {
+	    die "Error while reading $file: $!";
+	}
+    } else {
+        $configuration = '';
+    }
+
+    my $fh = IO::File->new($etcFile, "w");
+    if (!$fh  ||  !$fh->print($configuration)  ||  !$fh->flush()  ||
+	!$fh->close()) {
+	my $status = $!;
+	die "Error while creating new file $etcFile: $status";
+    }
 }
 
 
@@ -253,38 +323,24 @@ sub Add ($) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'e'});
 	my $tmpDir = $config->{'tmp_dir'} || "/tmp";
-	my $etcFile = $conf->{'etc_file'}  ||
-	    ($config->{'etc_dir'} . "/" . $conf->{'file'});
+	my $etcFile = $conf->EtcFile($config);
+	if (!$o->{'n'}) {
+	    $conf->RCS($etcFile, "out");
+	}
 	$conf->Edit(undef, $etcFile, $tmpDir);
 	if (!$o->{'n'}) {
-	    if (!$config->{'ci'}) {
-		print "Warning: Revision control not configured, skipping.\n";
-	    } else {
-		$( = $);
-		$< = $>;
-		$conf->RCS($etcFile);
-	    }
+	    $( = $);
+	    $< = $>;
+	    $conf->RCS($etcFile, "in");
 	}
     } elsif (exists($o->{'l'})) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'l'});
-	my $tftpFile = $conf->{'tftp_file'}  ||
-	    ($config->{'tftp_dir'} . "/" . $conf->{'file'});
-	if (-f $tftpFile  &&  ! -z _) {
-	    print "\nWarning: A file $tftpFile already exists!";
-	    print "\nOverwrite it? [y]";
-	    my $reply = <STDIN>;
-	    $reply =~ s/\s+//;
-	    if ($reply ne ''  &&  $reply !~ /y/i) {
-		exit 0;
-	    }
-	}
-	$conf->Load($tftpFile);
+	_Load($config, $conf, $o->{'l'})
     } elsif (exists($o->{'r'})) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'r'});
-	my $etcFile = $conf->{'etc_file'}  ||
-	    ($config->{'etc_dir'} . "/" . $conf->{'file'});
+	my $etcFile = $conf->EtcFile($config);
 	my $fh = Symbol::gensym();
 	if (!open($fh, $etcFile)) {
 	    print STDERR "Cannot open $etcFile: $!\n";
@@ -297,10 +353,8 @@ sub Add ($) {
     } elsif (exists($o->{'s'})) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'s'});
-	my $etcFile = $conf->{'etc_file'}  ||
-	    ($config->{'etc_dir'} . "/" . $conf->{'file'});
-	my $tftpFile = $conf->{'tftp_file'}  ||
-	    ($config->{'tftp_dir'} . "/" . $conf->{'file'});
+	my $etcFile = $conf->EtcFile($config);
+	my $tftpFile = $conf->TftpFile($config);
 	if (-f $tftpFile  &&  ! -z _) {
 	    print "\nWarning: A file $tftpFile already exists!";
 	    print "\nOverwrite it? [y]";
@@ -378,8 +432,8 @@ you like to add.
 
 The script will ask you some questions interactively and allow you to
 enter the new routers settings, in particular the IP address, the login
-and enable password, a description and a list of users that are
-allowed to manage the router.
+username, the login and enable password, a description and a list of users
+that are allowed to manage the router.
 
 
 =head2 Deleting router configurations

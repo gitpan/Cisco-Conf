@@ -131,20 +131,23 @@ sub Install ($$$) {
     $editors =~ s/\s+$//;
     $config->{'editors'} = [split(' ', $editors)];
 
-    my $ci;
-    if (!exists($config->{'ci'})) {
-	$ci = &$searchSub("ci");
-	if ($ci) {
-	    $ci = "$ci -l";
+    my $haveRcs = eval { require Rcs };
+    if (!$haveRcs) {
+	my $ci;
+	if (!exists($config->{'ci'})) {
+	    $ci = &$searchSub("ci");
+	    if ($ci) {
+		$ci = "$ci -l";
+	    } else {
+		$ci = 'none';
+	    }
 	} else {
-	    $ci = 'none';
+	    $ci = $config->{'ci'};
 	}
-    } else {
-	$ci = $config->{'ci'};
+	$ci = prompt("\nEnter a command for passing router configurations to"
+		     . " the\nrevision control system:", $ci);
+	$config->{'ci'} = ($ci  &&  $ci ne 'none') ? $ci : undef;
     }
-    $ci = prompt("\nEnter a command for passing router configurations to the"
-		 . "\nrevision control system:", $ci);
-    $config->{'ci'} = ($ci  &&  $ci ne 'none') ? $ci : undef;
 
     my $local_addr;
     if (!exists($config->{'local_addr'})) {

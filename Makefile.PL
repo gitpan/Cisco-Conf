@@ -86,22 +86,24 @@ sub postamble {
 
     <<"EOF";
 
+test :: all
+	\$(NOOP)
+
 install ::
-	$perl -e 'if (\$\$> != 0  &&  \$\$< != 0) { \\
-		die "Sorry, but you must be root to install the" . \\
-			" Cisco::Conf module"; \\
-            }'
+	if [ `perl -e 'print \$\$>'` -ne 0 ]; then                           \\
+	    echo "Sorry, but you must be root to install this module.";      \\
+	    exit 1;                                                          \\
+	fi
 	$perl -MFile::Path -e 'mkpath(["$etcdir", "$tftpdir"], 1, 0755)'
 	chown root \$(INSTALLSCRIPT)/cisconf
 	chmod 4755 \$(INSTALLSCRIPT)/cisconf
 	chown root $etcdir
 	chmod 700 $etcdir
-	$perl -MFile::Copy -e 'if (-f "$etcdir/configuration") {  \\
-		print "Not overwriting existing configfile" .     \\
-			" $etcdir/configuration\\n";              \\
-	    } else {                                              \\
-		copy("configuration", "$etcdir/configuration");   \\
-	    }'
+	if [ -f "$etcdir/configuration" ]; then                              \\
+	    echo "Not overwriting existing configfile $etcdir/configuration";\\
+	else                                                                 \\
+	    cp configuration "$etcdir/configuration";                        \\
+	fi
 
 EOF
 }
