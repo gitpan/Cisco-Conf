@@ -30,7 +30,7 @@ require Safe;
 require Data::Dumper;
 
 
-$Cisco::Conf::VERSION = '0.03';
+$Cisco::Conf::VERSION = '0.06';
 
 
 =pod
@@ -180,6 +180,11 @@ sub _SaveConfigFile ($$$) {
 	 ['tftp_dir',
 	  'The directory for transferring files from or to the routers'
 	 ],
+	 ['tftp_prefix',
+	  "The TFTP servers root directory, if any. For example, if a client\n"
+	  . "requests '/my.conf' and the TFTP server returns '/tftp/my.conf'\n"
+	  . "then a prefix '/tftp' should be used."
+	 ],
 	 ['editors',
 	  'A list of editors that may be used for modifying configurations'
          ],
@@ -327,7 +332,7 @@ sub Read ($$$) {
     my $self = $config->{'hosts'}->{$name};
     bless($self, (ref($class) || $class));
     my $key;
-    foreach $key (qw(editors ci local_addr)) {
+    foreach $key (qw(editors ci local_addr tftp_prefix)) {
 	if (!exists($self->{$key})) {
 	    $self->{$key} = $config->{$key};
 	}
@@ -663,6 +668,17 @@ sub _Logout ($$) {
 sub Load ($$) {
     my($self, $file) = @_;
 
+    my $tftp_client_file = $file;
+    if ($self->{'tftp_prefix'}) {
+	my $prefix = $self->{'tftp_prefix'};
+	if ($tftp_client_file =~ /^\Q$prefix\E(.*)/) {
+	    $tftp_client_file = $1;
+	} else {
+	    print STDERR("Warning: TFTP prefix $prefix doesn't match file",
+			 " name $tftp_client_file.\n");
+	}
+    }
+
     # Create an empty file $file
     my $fh;
     if (!($fh = IO::File->new($file, "w"))  ||	!$fh->close()  ||
@@ -679,7 +695,7 @@ sub Load ($$) {
 	die "Output error: $!";
     }
     $cmd->waitfor('/file to write \[.*\]\? /');
-    if (!$cmd->print($file)) {
+    if (!$cmd->print($tftp_client_file)) {
 	die "Output error: $!";
     }
     $cmd->waitfor('/\[confirm\]/');
@@ -714,6 +730,17 @@ the non-volatile memory by executing the command
 sub Save ($$;$) {
     my($self, $file, $write) = @_;
 
+    my $tftp_client_file = $file;
+    if ($self->{'tftp_prefix'}) {
+	my $prefix = $self->{'tftp_prefix'};
+	if ($tftp_client_file =~ /^\Q$prefix\E(.*)/) {
+	    $tftp_client_file = $1;
+	} else {
+	    print STDERR("Warning: TFTP prefix $prefix doesn't match file",
+			 " name $tftp_client_file.\n");
+	}
+    }
+
     # Change the file permissions of $file to 0444, so that it's
     # readable by the TFTP server
     if (!chmod(0444, $file)) {
@@ -733,7 +760,7 @@ sub Save ($$;$) {
 	die "Output error: $!";
     }
     $cmd->waitfor('/Name of configuration file \[.*\]\? /');
-    if (!$cmd->print($file)) {
+    if (!$cmd->print($tftp_client_file)) {
 	die "Output error: $!";
     }
     $cmd->waitfor('/confirm/');

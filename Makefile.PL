@@ -105,3 +105,12 @@ install ::
 
 EOF
 }
+
+sub libscan {
+    my($self, $path) = @_;
+    if ($path =~ /\~$/) {
+	undef;
+    } else {
+	$path;
+    }
+}

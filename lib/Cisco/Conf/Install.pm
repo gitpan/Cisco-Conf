@@ -23,7 +23,7 @@ package Cisco::Conf::Install;
 
 use strict;
 
-require ExtUtils::MakeMaker;
+use ExtUtils::MakeMaker qw(prompt);
 require Cisco::Conf;
 require Socket;
 
@@ -46,55 +46,69 @@ sub Install ($$$) {
 	undef;
     };
 
-    $config->{'etc_dir'} = ExtUtils::MakeMaker::prompt
-	("\nWhich directory should be used for router configurations?" .
-	 "\n", "$prefix/etc");
+    $config->{'etc_dir'} = prompt("\nWhich directory should be used for"
+				  . " router configurations?\n",
+				  "$prefix/etc");
     if (! -d $config->{'etc_dir'}) {
-	if (ExtUtils::MakeMaker::prompt
-	        ("\nA directory " . $config->{'etc_dir'} . " does not exist." .
-		 "\n Create it?",
-		 "y") !~ /y/i) {
+	if (prompt("\nA directory " . $config->{'etc_dir'}
+		   . " does not exist.\n Create it?", "y") !~ /y/i) {
 	    die "etc_dir not a valid directory, cannot continue.";
 	}
     } else {
 	my $target = $config->{'etc_dir'} . "/configuration";
 	if (-f $target) {
-	    my $reply = ExtUtils::MakeMaker::prompt
-		("\nA file $target already exists. Read configuration" .
-		 "\nfrom this file?", "y");
+	    my $reply = prompt("\nA file $target already exists. Read"
+			       . " configuration\nfrom this file?", "y");
 	    if ($reply =~ /y/i) {
 		$config = Cisco::Conf->_ReadConfigFile($target);
 	    }
 	}
     }
 
-    if (!exists($config->{'tftp_dir'})) {
-	my $tftpdir = $config->{'etc_dir'};
+    my $tftpdir = $config->{'tftp_dir'};
+    if (!defined($tftpdir)) {
+	$tftpdir = $config->{'etc_dir'};
 	if ($tftpdir =~ /\/etc$/) {
 	    $tftpdir =~ s/\/etc$/\/tftp/;
 	} else {
 	    $tftpdir = "/tftpboot";
 	}
-    
-	$config->{'tftp_dir'} = ExtUtils::MakeMaker::prompt
-	    ("\nWhich directory should be used for transferring files from or to" .
-	     "\nthe routers?",
-	     $tftpdir);
-	if (! -d $config->{'tftp_dir'}) {
-	    if (ExtUtils::MakeMaker::prompt
-	        ("\nA directory " . $config->{'tftp_dir'} .
-		 " does not exist.\n Create it?",
-		 "y") !~ /y/i) {
-		die "tftp_dir not a valid directory, cannot continue.";
-	    }
+    }
+    $config->{'tftp_dir'} = prompt("\nWhich directory should be used for"
+				   . " transferring files from or to\n"
+				   . " the routers?", $tftpdir);
+    if (! -d $config->{'tftp_dir'}) {
+	if (prompt("\nA directory " . $config->{'tftp_dir'}
+		   . " does not exist.\n Create it?", "y") !~ /y/i) {
+	    die "tftp_dir not a valid directory, cannot continue.";
 	}
-	if ($config->{'tftp_dir'} eq $config->{'etc_dir'}) {
-	    die "etc_dir and tftp_dir must be different";
+    }
+    if ($config->{'tftp_dir'} eq $config->{'etc_dir'}) {
+	die "etc_dir and tftp_dir must be different";
+    }
+
+    $config->{'tftp_prefix'} =
+	prompt("\nDepending on the TFTP servers configuration, it might\n" .
+	       "happen, that a prefix is added to the path requested by\n" .
+	       "the client.\n" .
+	       "For example, if your Cisco requests a file '/my.conf',\n" .
+	       "the TFTP server will read '/tftpboot/my.conf'.\n" .
+	       "Enter this prefix or the word 'none':",
+	       ($config->{'tftp_prefix'} || "none"));
+    if ($config->{'tftp_prefix'} eq 'none') {
+	$config->{'tftp_prefix'} = '';
+    }
+    if ($config->{'tftp_prefix'}) {
+	my $tftp_prefix = $config->{'tftp_prefix'};
+	if ($config->{'tftp_dir'} !~ /^\Q$tftp_prefix\E/) {
+	    die "TFTP prefix ($tftp_prefix) must be a prefix of the"
+		. " TFTP directory (" . $config->{'tftp_dir'} . ")";
 	}
     }
 
-    if (!exists($config->{'editors'})) {
-	my $editors = '';
+    my $editors = $config->{'editors'};
+    if (!$editors) {
+	$editors = '';
 	my $e;
 	foreach $e (qw(vi emacs joe)) {
 	    my $prog = &$searchSub($e);
@@ -105,32 +119,36 @@ sub Install ($$$) {
 		$editors .= $prog;
 	    }
 	}
-	$editors = ExtUtils::MakeMaker::prompt
-	    ("\nEnter a list of valid editors used for modifying router" .
-	     "\nconfigurations:", $editors);
-	if (!$editors) {
-	    die "No valid editor configured.";
-	}
-	$editors =~ s/^\s+//;
-	$editors =~ s/\s+$//;
-	$config->{'editors'} = [split(' ', $editors)];
+    } else {
+	$editors = join(" ", @$editors);
     }
+    $editors = prompt("\nEnter a list of valid editors used for modifying"
+		      . " router\nconfigurations:", $editors);
+    if (!$editors) {
+	die "No valid editor configured.";
+    }
+    $editors =~ s/^\s+//;
+    $editors =~ s/\s+$//;
+    $config->{'editors'} = [split(' ', $editors)];
 
+    my $ci;
     if (!exists($config->{'ci'})) {
-	my $ci = &$searchSub("ci");
+	$ci = &$searchSub("ci");
 	if ($ci) {
 	    $ci = "$ci -l";
 	} else {
 	    $ci = 'none';
 	}
-	$ci = ExtUtils::MakeMaker::prompt
-	    ("\nEnter a command for passing router configurations to the" .
-	     "\nrevision control system:", $ci);
-	$config->{'ci'} = ($ci  &&  $ci ne 'none') ? $ci : undef;
+    } else {
+	$ci = $config->{'ci'};
     }
+    $ci = prompt("\nEnter a command for passing router configurations to the"
+		 . "\nrevision control system:", $ci);
+    $config->{'ci'} = ($ci  &&  $ci ne 'none') ? $ci : undef;
 
+    my $local_addr;
     if (!exists($config->{'local_addr'})) {
-	my $local_addr = eval {
+	$local_addr = eval {
 	    require Sys::Hostname;
 	    Sys::Hostname::hostname();
 	};
@@ -148,32 +166,33 @@ sub Install ($$$) {
 	if (!$local_addr) {
 	    $local_addr = 'none';
 	}
-	$local_addr = ExtUtils::MakeMaker::prompt
-	    ("\nEnter the IP address of the local TFTP server:", $local_addr);
-	if ($local_addr) {
-	    if ($local_addr eq 'none') {
+    } else {
+	$local_addr = $config->{'local_addr'};
+    }
+    $local_addr = prompt("\nEnter the IP address of the local TFTP server:",
+			 $local_addr);
+    if ($local_addr) {
+	if ($local_addr eq 'none') {
+	    undef $local_addr;
+	} elsif (!Socket::inet_aton($local_addr)) {
+	    undef $local_addr;
+	} else {
+	    $local_addr
+		= Socket::inet_ntoa(Socket::inet_aton($local_addr));
+	    if ($local_addr =~ /^127\./) {
 		undef $local_addr;
-	    } elsif (!Socket::inet_aton($local_addr)) {
-		undef $local_addr;
-	    } else {
-		$local_addr
-		    = Socket::inet_ntoa(Socket::inet_aton($local_addr));
-		if ($local_addr =~ /^127\./) {
-		    undef $local_addr;
-		}
 	    }
 	}
-	if (!$local_addr) {
-	    die "The TFTP servers IP address must be valid, resolvable and not"
-		. " refer to the loopback device.";
-	}
-	$config->{'local_addr'} = $local_addr;
     }
+    if (!$local_addr) {
+	die "The TFTP servers IP address must be valid, resolvable and not"
+	    . " refer to the loopback device.";
+    }
+    $config->{'local_addr'} = $local_addr;
 
-    if (!exists($config->{'tmp_dir'})) {
-	$config->{'tmp_dir'} = ExtUtils::MakeMaker::prompt
-	    ("\nEnter a directory for creating temporary files:", "/tmp");
-    }
+    $config->{'tmp_dir'} = prompt("\nEnter a directory for creating temporary"
+				  . " files:",
+				  $config->{'tmp_dir'} || "/tmp");
 
     Cisco::Conf->_SaveConfigFile($file, $config);
 

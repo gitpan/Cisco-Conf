@@ -1,5 +1,16 @@
-1998-05-20  Jochen Wiedmann  <joe@laptop.ispsoft.de>
+1998-07-17  Jochen Wiedmann  <joe@ispsoft.de> (0.05)
+
+	* cisconf.PL: Fixed bug in cisconf/Save; the tftp_file was
+	  not always closed. My thanks to Tungning Cheng <cherng@bbn.com>.
+	* cisconf.PL: Made stripping of comments configurable; suggested
+	  by Tungning Cheng <cherng@bbn.com>.
+
+1998-07-14  Jochen Wiedmann  <joe@ispsoft.de> (0.04)
+
+	* lib/Cisco/Conf.pm: Added config->{tftp_prefix}, requested
+	  by Tungning Cheng <cherng@bbn.com>.
+
+1998-05-20  Jochen Wiedmann  <joe@ispsoft.de>
 
 	* Original version
-
 

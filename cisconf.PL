@@ -28,6 +28,7 @@ use strict;
 require Getopt::Std;
 require Cisco::Conf;
 require Socket;
+require Symbol;
 
 
 ############################################################################
@@ -36,7 +37,7 @@ require Socket;
 #
 ############################################################################
 
-my $VERSION = 'cisconf, 20-May-1998, Copyright (C) 1998 by Jochen Wiedmann';
+my $VERSION = 'cisconf, 24-Jul-1998, Copyright (C) 1998 by Jochen Wiedmann';
 my $CONFIG_FILE = "~etc_dir~/configuration";
 my $ETC_DIR = "~etc_dir~";
 my $TFTP_DIR = "~tftp_dir~";
@@ -284,15 +285,15 @@ sub Add ($) {
 	my $conf = Cisco::Conf->Read($config, $o->{'r'});
 	my $etcFile = $conf->{'etc_file'}  ||
 	    ($config->{'etc_dir'} . "/" . $conf->{'file'});
-	if (!open(FILE, $etcFile)) {
+	my $fh = Symbol::gensym();
+	if (!open($fh, $etcFile)) {
 	    print STDERR "Cannot open $etcFile: $!\n";
 	    exit 1;
 	}
 	my $line;
-	while (defined($line = <FILE>)) {
+	while (defined($line = <$fh>)) {
 	    print $line;
 	}
-	close(FILE);
     } elsif (exists($o->{'s'})) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'s'});
@@ -312,17 +313,24 @@ sub Add ($) {
 	my $configuration;
 	{
 	    local $/ = undef;
-	    if (!open(FILE, $etcFile)  ||
-		!defined($configuration = <FILE>)  ||  !close(FILE)) {
+	    my $fh = Symbol::gensym();
+	    if (!open($fh, $etcFile)  ||
+		!defined($configuration = <$fh>)) {
 		print STDERR "Error while reading $etcFile: $!\n";
 		exit 1;
 	    }
 	}
-	$configuration = Cisco::Conf->Strip($configuration);
-	if (!open(FILE, ">$tftpFile")  ||  !print FILE ($configuration)  ||
-	    !close(FILE)) {
-	    print STDERR "Error while creating $tftpFile: $!\n";
-	    exit 1;
+	if (!$conf->{'wants_comments'}) {
+	    $configuration = Cisco::Conf->Strip($configuration);
+	}
+	{   my $fh = Symbol::gensym();
+
+	    if (!open($fh, ">$tftpFile")      ||
+		!(print $fh $configuration)  ||
+		!(close($fh))) {
+		print STDERR "Error while creating $tftpFile: $!\n";
+		exit 1;
+	    }
 	}
 	$conf->Save($tftpFile, (exists($o->{'w'}) ? 1 : 0));
     } else {
