@@ -30,7 +30,7 @@ require Safe;
 require Data::Dumper;
 
 
-$Cisco::Conf::VERSION = '0.02';
+$Cisco::Conf::VERSION = '0.03';
 
 
 =pod
@@ -76,7 +76,7 @@ Cisco::Conf - Perl module for configuring Cisco routers via TFTP
   $stripped = Cisco::Conf->Strip($configuration);
 
   # Read a configuration from 'myfile' and save it into the router
-  $conf->Save('myfile');
+  $conf->Save('myfile', $write);
 
   # Return a list of all configurations that the current user may
   # access
@@ -623,14 +623,18 @@ sub _Login ($) {
     my $loggedIn = 0;
     while (1) {
 	my $match;
-	(undef, $match) = $cmd->waitfor(Match => '/\w+\>/',
-					Match => '/\w+\#/',
+	(undef, $match) = $cmd->waitfor(Match => '/\>/',
+					Match => '/\#/',
 					Match => '/assword:/');
-	if ($match =~ /\w+\#/) {
+	if ($match =~ /\#/) {
+	    if (!$cmd->print("term mon")) {
+		die "Output error: $!";
+	    }
+	    $cmd->waitfor('/\#/');
 	    return $cmd;
 	}
 	my $output;
-	if ($match =~ /\w+\>/) {
+	if ($match =~ /\>/) {
 	    $loggedIn = 1;
 	    $output = "enable";
 	} elsif (!$loggedIn) {
@@ -670,7 +674,7 @@ sub Load ($$) {
     if (!$cmd->print("copy running-config tftp")) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/\[\d+\.\d+\.\d+\.\d+\]\? /');
+    $cmd->waitfor('/\[(\d+\.\d+\.\d+\.\d+)?\]\? /');
     if (!$cmd->print($self->{'_local_addr'})) {
 	die "Output error: $!";
     }
@@ -682,7 +686,7 @@ sub Load ($$) {
     if (!$cmd->print('y')) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/\[OK\].*\w+\#/s');
+    $cmd->waitfor('/\[OK\].*\#/s');
     $self->_Logout($cmd);
 }
 
@@ -717,10 +721,6 @@ sub Save ($$;$) {
     }
 
     my $cmd = $self->_Login();
-    if (!$cmd->print("term mon")) {
-	die "Output error: $!";
-    }
-    $cmd->waitfor('/\#/');
     if (!$cmd->print("copy tftp running-config")) {
 	die "Output error: $!";
     }
@@ -728,7 +728,7 @@ sub Save ($$;$) {
     if (!$cmd->print("")) {
 	die "Output error: $!";
     }
-    $cmd->waitfor('/\[\d+\.\d+\.\d+\.\d+\]\? /');
+    $cmd->waitfor('/\[(\d+\.\d+\.\d+\.\d+)?\]\? /');
     if (!$cmd->print($self->{'_local_addr'})) {
 	die "Output error: $!";
     }
@@ -740,7 +740,7 @@ sub Save ($$;$) {
     if (!$cmd->print('y')) {
  	die "Output error: $!";
     }
-    $cmd->waitfor('/\[OK.*bytes\].*\w+\#/s');
+    $cmd->waitfor('/\[OK.*bytes\].*\#/s');
     if ($write) {
 	if (!$cmd->print('write memory')) {
 	    die "Output error: $!";

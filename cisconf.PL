@@ -247,7 +247,7 @@ sub Add ($) {
     } elsif (exists($o->{'a'})) {
 	Add($o->{'a'});
     } elsif (exists($o->{'d'})) {
-	Cisco->Delete($CONFIG_FILE, $o->{'d'});
+	Cisco::Conf->Remove($CONFIG_FILE, $o->{'d'});
     } elsif (exists($o->{'e'})) {
 	my $config = Cisco::Conf->_ReadConfigFile($CONFIG_FILE);
 	my $conf = Cisco::Conf->Read($config, $o->{'e'});
